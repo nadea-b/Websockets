@@ -175,6 +175,39 @@ def fetch_url(url):
 
     return extract_html_content(response)
 
+# Update the request method with complete redirect handling
+def request(self, url, method="GET", headers=None, body=None, follow_redirects=True, max_redirects=5):
+    """Make HTTP request and handle redirects"""
+    protocol, host, path, port = self.parse_url(url)
+
+    if not self.connect(host, port, use_ssl=(protocol == 'https')):
+        return None
+
+    if not self.send_request(host, path, method, headers, body):
+        self.close()
+        return None
+
+    response = self.receive_response()
+    self.close()
+
+    if not response:
+        return None
+
+    # Handle redirects
+    if follow_redirects and max_redirects > 0:
+        status_match = re.search(r'HTTP/[\d.]+\s+(\d+)', response)
+        if status_match and status_match.group(1) in ('301', '302', '303', '307', '308'):
+            location_match = re.search(r'Location:\s*(.*?)[\r\n]', response, re.IGNORECASE)
+            if location_match:
+                redirect_url = location_match.group(1).strip()
+                if not redirect_url.startswith(('http://', 'https://')):
+                    redirect_url = f"{protocol}://{host}{redirect_url}"
+
+                print(f"Redirecting to: {redirect_url}")
+                return self.request(redirect_url, method, headers, body, follow_redirects, max_redirects - 1)
+
+    return response
+
 
 if __name__ == "__main__":
     main()
