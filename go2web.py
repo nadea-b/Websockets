@@ -74,5 +74,72 @@ class HTTPClient:
             self.socket.close()
 
 
+def send_request(self, host, path, method="GET", headers=None, body=None):
+    """Send HTTP request"""
+    if headers is None:
+        headers = {}
+
+    headers.update({
+        "Host": host,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Connection": "close"
+    })
+
+    request_lines = [f"{method} {path} HTTP/1.1"]
+    for key, value in headers.items():
+        request_lines.append(f"{key}: {value}")
+
+    request = "\r\n".join(request_lines) + "\r\n\r\n"
+    if body:
+        request += body
+
+    try:
+        self.socket.sendall(request.encode())
+        return True
+    except Exception as e:
+        print(f"Request error: {e}")
+        return False
+
+
+def receive_response(self):
+    """Receive and parse HTTP response"""
+    response = b''
+    try:
+        while True:
+            data = self.socket.recv(4096)
+            if not data:
+                break
+            response += data
+
+        return response.decode('utf-8', errors='replace')
+    except Exception as e:
+        print(f"Response error: {e}")
+        return None
+
+
+def request(self, url, method="GET", headers=None, body=None, follow_redirects=True, max_redirects=5):
+    """Make HTTP request and handle redirects"""
+    protocol, host, path, port = self.parse_url(url)
+
+    if not self.connect(host, port, use_ssl=(protocol == 'https')):
+        return None
+
+    if not self.send_request(host, path, method, headers, body):
+        self.close()
+        return None
+
+    response = self.receive_response()
+    self.close()
+
+    if not response:
+        return None
+
+    # Handle redirects (basic implementation)
+    # Full implementation will come in a future commit
+
+    return response
+
+
 if __name__ == "__main__":
     main()
