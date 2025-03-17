@@ -256,6 +256,12 @@ def search(term, engine="duckduckgo"):
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": "https://duckduckgo.com/"
         }
+    elif engine == "google":
+        url = f"https://www.google.com/search?q={urllib.parse.quote_plus(term)}"
+        headers = {
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.google.com/"
+        }
     else:
         return "Unsupported search engine."
 
@@ -264,6 +270,7 @@ def search(term, engine="duckduckgo"):
         return "Failed to get search results."
 
     return extract_search_results(response, engine)
+
 
 
 if __name__ == "__main__":
