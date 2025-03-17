@@ -5,6 +5,8 @@ import os
 import socket
 import ssl
 from urllib.parse import urlparse
+import re
+import html
 
 
 def create_parser():
@@ -139,6 +141,39 @@ def request(self, url, method="GET", headers=None, body=None, follow_redirects=T
     # Full implementation will come in a future commit
 
     return response
+
+def extract_html_content(response):
+    """Extract HTML body from response and clean it"""
+    # Split headers and body
+    parts = response.split('\r\n\r\n', 1)
+    if len(parts) < 2:
+        return "No content found in response."
+
+    body = parts[1]
+
+    # Remove HTML tags
+    clean_text = re.sub(r'<head>.*?</head>', '', body, flags=re.DOTALL)
+    clean_text = re.sub(r'<script.*?>.*?</script>', '', clean_text, flags=re.DOTALL)
+    clean_text = re.sub(r'<style.*?>.*?</style>', '', clean_text, flags=re.DOTALL)
+    clean_text = re.sub(r'<.*?>', ' ', clean_text)
+
+    # Decode HTML entities
+    clean_text = html.unescape(clean_text)
+
+    # Replace multiple spaces and newlines
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+
+    return clean_text
+
+def fetch_url(url):
+    """Fetch content from specified URL"""
+    client = HTTPClient()
+    response = client.request(url)
+
+    if not response:
+        return "Failed to fetch URL."
+
+    return extract_html_content(response)
 
 
 if __name__ == "__main__":
