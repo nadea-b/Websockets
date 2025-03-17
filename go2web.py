@@ -271,7 +271,19 @@ def search(term, engine="duckduckgo"):
 
     return extract_search_results(response, engine)
 
-
+def open_result(result_number, search_results):
+    """Open a specific search result"""
+    lines = search_results.strip().split('\n\n')
+    if 0 < result_number <= len(lines):
+        result = lines[result_number - 1]
+        url_match = re.search(r'URL: (https?://.*?)$', result, re.MULTILINE)
+        if url_match:
+            url = url_match.group(1)
+            return fetch_url(url)
+        else:
+            return "Could not find URL in search result."
+    else:
+        return f"Invalid result number. Please specify a number between 1 and {len(lines)}."
 
 if __name__ == "__main__":
     main()
