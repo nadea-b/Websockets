@@ -2,6 +2,9 @@
 import argparse
 import sys
 import os
+import socket
+import ssl
+from urllib.parse import urlparse
 
 
 def create_parser():
@@ -29,6 +32,46 @@ def main():
         print("Open functionality not implemented yet.")
     else:
         parser.print_help()
+
+class HTTPClient:
+    def __init__(self):
+        self.socket = None
+        self.ssl_context = ssl.create_default_context()
+
+    def parse_url(self, url):
+        """Parse URL into components"""
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+
+        parsed = urlparse(url)
+        protocol = 'https' if parsed.scheme == 'https' else 'http'
+        host = parsed.netloc
+        path = parsed.path if parsed.path else '/'
+        if parsed.query:
+            path += '?' + parsed.query
+
+        port = 443 if protocol == 'https' else 80
+
+        return protocol, host, path, port
+
+    def connect(self, host, port, use_ssl=True):
+        """Establish connection to host"""
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.settimeout(10)
+
+        try:
+            self.socket.connect((host, port))
+            if use_ssl:
+                self.socket = self.ssl_context.wrap_socket(self.socket, server_hostname=host)
+            return True
+        except (socket.timeout, socket.error) as e:
+            print(f"Connection error: {e}")
+            return False
+
+    def close(self):
+        """Close the connection"""
+        if self.socket:
+            self.socket.close()
 
 
 if __name__ == "__main__":
