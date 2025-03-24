@@ -45,10 +45,19 @@ class HTTPClient:
             print(f"Connection error: {e}")
             return False
 
-    def send_request(self, host, path, method="GET", headers=None, body=None):
-        """Send HTTP request"""
+    def send_request(self, host, path, method="GET", headers=None, body=None, content_type=None):
+        """Send HTTP request with content negotiation"""
         if headers is None:
             headers = {}
+
+        # Define accepted content types
+        if content_type == "json":
+            headers["Accept"] = "application/json"
+        elif content_type == "html":
+            headers["Accept"] = "text/html"
+        else:
+            # Default: accept anything, but prefer JSON and HTML
+            headers["Accept"] = "application/json, text/html;q=0.9, */*;q=0.8"
 
         headers.update({
             "Host": host,
@@ -285,14 +294,44 @@ def open_result(result_number, search_results):
     else:
         return f"Invalid result number. Please specify a number between 1 and {len(lines)}."
 
+def parse_response(self, response, preferred_format=None):
+    """Parse HTTP response based on content type"""
+    # Split headers and body
+    parts = response.split('\r\n\r\n', 1)
+    if len(parts) < 2:
+        return "No content found in response."
+
+    headers, body = parts[0], parts[1]
+
+    # Check content type
+    content_type = None
+    content_type_match = re.search(r'Content-Type:\s*(.*?)[\r\n]', headers, re.IGNORECASE)
+    if content_type_match:
+        content_type = content_type_match.group(1).lower()
+
+    # Parse based on content type
+    if 'application/json' in content_type:
+        try:
+            json_data = json.loads(body)
+            return json_data if preferred_format == "raw" else json.dumps(json_data, indent=2)
+        except:
+            return "Failed to parse JSON response"
+    elif 'text/html' in content_type:
+        return extract_html_content(response)
+    else:
+        # For other content types, return as is
+        return body
+
 
 def create_parser():
-    """Create command line argument parser"""
     parser = argparse.ArgumentParser(prog='go2web', description='Web request and search tool')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-u', '--url', help='Make an HTTP request to the specified URL')
     group.add_argument('-s', '--search', help='Search the term using DuckDuckGo and print top 10 results')
     group.add_argument('-o', '--open', type=int, help='Open the specified search result')
+    parser.add_argument('--json', action='store_true', help='Request JSON content')
+    parser.add_argument('--html', action='store_true', help='Request HTML content')
+    parser.add_argument('--no-cache', action='store_true', help='Disable caching')
     return parser
 
 
@@ -300,11 +339,25 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
+    # Configure content type
+    content_type = None
+    if args.json:
+        content_type = "json"
+    elif args.html:
+        content_type = "html"
+
+    # Configure caching
+    use_cache = not args.no_cache
+
+    # Initialize HTTP client with cache
+    client = HTTPClient()
+    client.cache = HTTPCache()
+
     # Store last search results for -o option
     last_search_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.last_search')
 
     if args.url:
-        result = fetch_url(args.url)
+        result = fetch_url(args.url, content_type=content_type, use_cache=use_cache)
         print(result)
     elif args.search:
         result = search(args.search)
