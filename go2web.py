@@ -8,12 +8,61 @@ import html
 import urllib.parse
 import os
 from urllib.parse import urlparse, parse_qs
+import json
+import time
+import hashlib
+import os
+
+
+class HTTPCache:
+    def __init__(self, cache_dir='.cache'):
+        self.cache_dir = cache_dir
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
+
+    def get_cache_key(self, url, headers=None):
+        """Generate a unique cache key for the request"""
+        if headers is None:
+            headers = {}
+        key_data = f"{url}:{json.dumps(headers, sort_keys=True)}"
+        return hashlib.md5(key_data.encode()).hexdigest()
+
+    def get_cached_response(self, url, headers=None, max_age=3600):
+        """Get cached response if available and not expired"""
+        cache_key = self.get_cache_key(url, headers)
+        cache_file = os.path.join(self.cache_dir, cache_key)
+
+        if os.path.exists(cache_file):
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+
+            # Check if cache is still valid
+            cache_time = cache_data.get('timestamp', 0)
+            if time.time() - cache_time <= max_age:
+                return cache_data.get('response')
+
+        return None
+
+    def cache_response(self, url, response, headers=None):
+        """Cache HTTP response"""
+        cache_key = self.get_cache_key(url, headers)
+        cache_file = os.path.join(self.cache_dir, cache_key)
+
+        cache_data = {
+            'timestamp': time.time(),
+            'url': url,
+            'response': response
+        }
+
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f)
 
 
 class HTTPClient:
     def __init__(self):
         self.socket = None
         self.ssl_context = ssl.create_default_context()
+        self.cache = HTTPCache()  # Always create a new HTTPCache instance
 
     def parse_url(self, url):
         """Parse URL into components"""
@@ -101,14 +150,21 @@ class HTTPClient:
         if self.socket:
             self.socket.close()
 
-    def request(self, url, method="GET", headers=None, body=None, follow_redirects=True, max_redirects=5):
-        """Make HTTP request and handle redirects"""
+    def request(self, url, method="GET", headers=None, body=None, follow_redirects=True, max_redirects=5,
+                use_cache=True, content_type=None):
+        """Make HTTP request with caching support"""
+        if use_cache and method == "GET":
+            cached_response = self.cache.get_cached_response(url, headers)
+            if cached_response:
+                print("Using cached response")
+                return cached_response
+
         protocol, host, path, port = self.parse_url(url)
 
         if not self.connect(host, port, use_ssl=(protocol == 'https')):
             return None
 
-        if not self.send_request(host, path, method, headers, body):
+        if not self.send_request(host, path, method, headers, body, content_type):
             self.close()
             return None
 
@@ -129,8 +185,14 @@ class HTTPClient:
                         redirect_url = f"{protocol}://{host}{redirect_url}"
 
                     print(f"Redirecting to: {redirect_url}")
-                    return self.request(redirect_url, method, headers, body, follow_redirects, max_redirects - 1)
-        return response
+                    return self.request(redirect_url, method, headers, body, follow_redirects, max_redirects - 1,
+                                        use_cache, content_type)
+
+            # After successful response:
+            if use_cache and method == "GET" and response:
+                self.cache.cache_response(url, response, headers)
+
+            return response
 
 
 def extract_html_content(response):
@@ -269,10 +331,10 @@ def search(term, engine="duckduckgo"):
     return extract_search_results(response, engine)
 
 
-def fetch_url(url):
+def fetch_url(url, content_type=None, use_cache=True):
     """Fetch content from specified URL"""
     client = HTTPClient()
-    response = client.request(url)
+    response = client.request(url, content_type=content_type, use_cache=use_cache)
 
     if not response:
         return "Failed to fetch URL."
@@ -349,9 +411,8 @@ def main():
     # Configure caching
     use_cache = not args.no_cache
 
-    # Initialize HTTP client with cache
+    # Initialize HTTP client (no need to manually set cache)
     client = HTTPClient()
-    client.cache = HTTPCache()
 
     # Store last search results for -o option
     last_search_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.last_search')
